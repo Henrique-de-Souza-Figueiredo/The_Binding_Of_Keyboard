@@ -1,5 +1,4 @@
 import json
-import json
 import os
 import queue
 import sys
@@ -16,7 +15,13 @@ from mapping.presets import CONTROLLER_PRESETS, botoes_do_padrao, criar_botoes_p
 from runtime.activity import RuntimeActivityLog, activity_from_action, activity_message
 from runtime.capture import captura_por_evento, chave_dispositivo_por_tipo
 from runtime.gamepad import GamepadBackendError, XboxGamepadBackend
-from runtime.mapper import mapear_evento_para_acoes
+from runtime.input_blocker import (
+    InputBlockSpec,
+    PhysicalInputBlocker,
+    criar_especificacao_bloqueio,
+    vks_por_entrada,
+)
+from runtime.mapper import mapear_evento_para_acoes, normalizar_rotulo_entrada
 
 
 APP_NAME = "The Binding Of Keyboard"
@@ -60,6 +65,10 @@ class TheBindingOfKeyboardApp(tk.Tk):
         self.runtime_activity_log = RuntimeActivityLog()
         self.runtime_activity_window = None
         self.gamepad_backends = {}
+        self.input_blocker = None
+        self.toggle_hotkey_blocker = None
+        self.toggle_hotkey_queue = queue.Queue()
+        self.toggle_hotkey_last_at = 0.0
         self.execucao_config = {}
         self.runtime_profile_combos = []
         self.terminal_window = None
@@ -70,6 +79,9 @@ class TheBindingOfKeyboardApp(tk.Tk):
         self._carregar_dispositivos()
         self._carregar_configuracoes()
         self._atualizar_estado_execucao()
+        self._reiniciar_atalho_execucao()
+        self.after(80, self._processar_fila_atalho_execucao)
+        self.protocol("WM_DELETE_WINDOW", self._fechar_app)
 
     def _configurar_estilo(self):
         self.configure(bg="#f4f6f8")
@@ -102,6 +114,7 @@ class TheBindingOfKeyboardApp(tk.Tk):
         self.stick_intensity_var = tk.IntVar(value=100)
         self.mouse_pulse_ms_var = tk.IntVar(value=60)
         self.mouse_deadzone_var = tk.IntVar(value=0)
+        self.desativar_atalho_var = tk.StringVar()
         self.dispositivos_perfil_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Parado")
 
@@ -147,7 +160,7 @@ class TheBindingOfKeyboardApp(tk.Tk):
             controls,
             text="Pare",
             style="Danger.TButton",
-            command=self._parar,
+            command=self._alternar_execucao,
         )
         self.stop_button.pack(side=tk.LEFT)
 
@@ -337,6 +350,34 @@ class TheBindingOfKeyboardApp(tk.Tk):
             textvariable=self.mouse_deadzone_var,
             width=8,
         ).grid(row=2, column=1, sticky="e", pady=(6, 0))
+
+        ttk.Label(settings_row, text="Atalho para parar", style="Muted.TLabel").grid(
+            row=3,
+            column=0,
+            sticky="w",
+            pady=(6, 0),
+        )
+
+        shortcut_row = ttk.Frame(settings_row, style="Panel.TFrame")
+        shortcut_row.grid(row=3, column=1, sticky="ew", pady=(6, 0))
+        shortcut_row.columnconfigure(0, weight=1)
+
+        ttk.Entry(
+            shortcut_row,
+            textvariable=self.desativar_atalho_var,
+            width=8,
+            state="readonly",
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(
+            shortcut_row,
+            text="Capturar",
+            command=self._capturar_atalho_desativar,
+        ).grid(row=0, column=1, padx=(0, 6))
+        ttk.Button(
+            shortcut_row,
+            text="Limpar",
+            command=self._limpar_atalho_desativar,
+        ).grid(row=0, column=2)
 
     def _criar_painel_editor(self, parent):
         panel = ttk.Frame(parent, style="Panel.TFrame", padding=16)
@@ -636,6 +677,9 @@ class TheBindingOfKeyboardApp(tk.Tk):
         self.stick_intensity_var.set(int(self.execucao_config.get("stick_intensity", 100)))
         self.mouse_pulse_ms_var.set(int(self.execucao_config.get("mouse_pulse_ms", 60)))
         self.mouse_deadzone_var.set(int(self.execucao_config.get("mouse_deadzone", 0)))
+        self.desativar_atalho_var.set(
+            normalizar_rotulo_entrada(self.execucao_config.get("desativar_atalho", ""))
+        )
         self._renderizar_controles_runtime()
 
     def _execucao_para_json(self):
@@ -649,6 +693,7 @@ class TheBindingOfKeyboardApp(tk.Tk):
             "stick_intensity": self._valor_int_var(self.stick_intensity_var, 100),
             "mouse_pulse_ms": self._valor_int_var(self.mouse_pulse_ms_var, 60),
             "mouse_deadzone": self._valor_int_var(self.mouse_deadzone_var, 0),
+            "desativar_atalho": normalizar_rotulo_entrada(self.desativar_atalho_var.get()),
         }
 
     def _valor_int_var(self, variable, default):
@@ -1152,7 +1197,31 @@ class TheBindingOfKeyboardApp(tk.Tk):
 
         return True
 
-    def _abrir_modal_captura_entrada(self, callback):
+    def _capturar_atalho_desativar(self):
+        self._abrir_modal_captura_entrada(
+            self._definir_atalho_desativar,
+            modo_inicial="teclado",
+            mostrar_modos=False,
+            vincular_dispositivo=False,
+            texto="aperte a tecla que vai desativar o programa",
+        )
+
+    def _definir_atalho_desativar(self, entrada):
+        self.desativar_atalho_var.set(normalizar_rotulo_entrada(entrada))
+        self._reiniciar_atalho_execucao()
+
+    def _limpar_atalho_desativar(self):
+        self.desativar_atalho_var.set("")
+        self._parar_atalho_execucao()
+
+    def _abrir_modal_captura_entrada(
+        self,
+        callback,
+        modo_inicial="teclado",
+        mostrar_modos=True,
+        vincular_dispositivo=True,
+        texto="aperte uma tecla ou botao do mouse",
+    ):
         modal = tk.Toplevel(self)
         modal.title("Capturar entrada")
         modal.geometry("460x230")
@@ -1169,7 +1238,7 @@ class TheBindingOfKeyboardApp(tk.Tk):
         )
         status_var = tk.StringVar(value="Aguardando entrada Raw Input...")
         device_var = tk.StringVar(value="")
-        capture_mode_var = tk.StringVar(value="teclado")
+        capture_mode_var = tk.StringVar(value=modo_inicial)
 
         container = ttk.Frame(modal, padding=18)
         container.pack(fill=tk.BOTH, expand=True)
@@ -1177,29 +1246,30 @@ class TheBindingOfKeyboardApp(tk.Tk):
 
         ttk.Label(
             container,
-            text="aperte uma tecla ou botao do mouse",
+            text=texto,
             style="Subheader.TLabel",
             anchor=tk.CENTER,
         ).grid(row=0, column=0, sticky="ew", pady=(8, 8))
 
-        mode_row = ttk.Frame(container)
-        mode_row.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        if mostrar_modos:
+            mode_row = ttk.Frame(container)
+            mode_row.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
-        for column, (label, value) in enumerate(
-            (
-                ("Teclado", "teclado"),
-                ("Botao mouse", "botao_mouse"),
-                ("Movimento", "movimento_mouse"),
-                ("Qualquer", "qualquer"),
-            )
-        ):
-            mode_row.columnconfigure(column, weight=1)
-            ttk.Radiobutton(
-                mode_row,
-                text=label,
-                value=value,
-                variable=capture_mode_var,
-            ).grid(row=0, column=column, sticky="w")
+            for column, (label, value) in enumerate(
+                (
+                    ("Teclado", "teclado"),
+                    ("Botao mouse", "botao_mouse"),
+                    ("Movimento", "movimento_mouse"),
+                    ("Qualquer", "qualquer"),
+                )
+            ):
+                mode_row.columnconfigure(column, weight=1)
+                ttk.Radiobutton(
+                    mode_row,
+                    text=label,
+                    value=value,
+                    variable=capture_mode_var,
+                ).grid(row=0, column=column, sticky="w")
 
         ttk.Label(
             container,
@@ -1255,7 +1325,8 @@ class TheBindingOfKeyboardApp(tk.Tk):
                     continue
 
                 monitor.parar()
-                self._vincular_dispositivo_capturado(captura)
+                if vincular_dispositivo:
+                    self._vincular_dispositivo_capturado(captura)
                 callback(captura["entrada"])
                 modal.destroy()
                 return
@@ -1410,10 +1481,19 @@ class TheBindingOfKeyboardApp(tk.Tk):
             return
 
         self._sincronizar_configuracao_atual()
+        if not self._validar_atalho_desativar_para_start():
+            return
+
         perfis = self._validar_perfis_runtime_ativos()
 
         if not perfis:
             return
+
+        self.runtime_queue = queue.Queue()
+        self.runtime_activity_log.clear()
+        self.runtime_device_manager = DeviceManager()
+        self.runtime_session_id += 1
+        session_id = self.runtime_session_id
 
         try:
             backends = {}
@@ -1422,6 +1502,7 @@ class TheBindingOfKeyboardApp(tk.Tk):
                 backends[perfil["slot"]] = self._criar_backend_gamepad()
 
             self.gamepad_backends = backends
+            self._iniciar_bloqueador_input(perfis, session_id)
         except GamepadBackendError as erro:
             for backend in backends.values():
                 try:
@@ -1434,9 +1515,24 @@ class TheBindingOfKeyboardApp(tk.Tk):
             self._registrar_atividade_runtime(activity_message("ERRO", str(erro)))
             messagebox.showerror(APP_NAME, str(erro))
             return
+        except Exception as erro:
+            for backend in backends.values():
+                try:
+                    backend.close()
+                except Exception:
+                    pass
 
-        self.runtime_queue = queue.Queue()
-        self.runtime_activity_log.clear()
+            self._parar_bloqueador_input()
+            self._fechar_gamepad_backends()
+            self.status_var.set(f"Erro ao bloquear entradas: {erro}")
+            self._registrar_atividade_runtime(activity_message("ERRO", str(erro)))
+            messagebox.showerror(
+                APP_NAME,
+                "Nao foi possivel bloquear as entradas fisicas mapeadas.\n\n"
+                f"{erro}",
+            )
+            return
+
         self._sincronizar_janela_execucao()
         self.runtime_profiles = perfis
         self.runtime_action_counts_by_slot = {
@@ -1444,9 +1540,6 @@ class TheBindingOfKeyboardApp(tk.Tk):
             for perfil in perfis
         }
         self._sincronizar_janela_execucao()
-        self.runtime_device_manager = DeviceManager()
-        self.runtime_session_id += 1
-        session_id = self.runtime_session_id
         self.runtime_monitor = RawInputMonitor(
             self.runtime_device_manager,
             event_callback=lambda evento: self._receber_evento_runtime(session_id, evento),
@@ -1468,9 +1561,14 @@ class TheBindingOfKeyboardApp(tk.Tk):
         self.after(80, self._processar_fila_runtime)
 
     def _parar(self):
+        if not self.rodando and self.runtime_monitor is None and self.input_blocker is None:
+            return
+
         if self.runtime_monitor is not None:
             self.runtime_monitor.parar()
+            self.runtime_monitor = None
 
+        self._parar_bloqueador_input()
         self._fechar_gamepad_backends()
         self.runtime_profiles = []
         self.runtime_action_counts_by_slot = {}
@@ -1479,6 +1577,74 @@ class TheBindingOfKeyboardApp(tk.Tk):
         self._atualizar_status_slots()
         self._sincronizar_janela_execucao()
         self._registrar_atividade_runtime(activity_message("INFO", "Runtime parado"))
+
+    def _alternar_execucao(self):
+        if self.rodando:
+            self._parar()
+        else:
+            self._start()
+
+    def _reiniciar_atalho_execucao(self):
+        self._parar_atalho_execucao()
+
+        atalho = normalizar_rotulo_entrada(self.desativar_atalho_var.get())
+        vks = vks_por_entrada(atalho)
+
+        if not vks:
+            return
+
+        spec = InputBlockSpec(
+            keyboard_vks=frozenset(vks),
+            mouse_buttons=frozenset(),
+        )
+        self.toggle_hotkey_blocker = PhysicalInputBlocker(
+            spec,
+            allow_current_process=False,
+            keyboard_event_callback=self._receber_evento_atalho_execucao,
+        )
+
+        try:
+            self.toggle_hotkey_blocker.start()
+        except Exception as erro:
+            self.toggle_hotkey_blocker = None
+            self.status_var.set(f"Erro no atalho de execucao: {erro}")
+
+    def _parar_atalho_execucao(self):
+        if self.toggle_hotkey_blocker is None:
+            return
+
+        try:
+            self.toggle_hotkey_blocker.stop()
+        finally:
+            self.toggle_hotkey_blocker = None
+
+    def _receber_evento_atalho_execucao(self, evento):
+        self.toggle_hotkey_queue.put(dict(evento))
+
+    def _processar_fila_atalho_execucao(self):
+        while not self.toggle_hotkey_queue.empty():
+            evento = self.toggle_hotkey_queue.get()
+
+            if (
+                self._evento_e_atalho_desativar(evento)
+                and time.monotonic() - self.toggle_hotkey_last_at >= 0.35
+            ):
+                self.toggle_hotkey_last_at = time.monotonic()
+                self._registrar_atividade_runtime(
+                    activity_message(
+                        "INFO",
+                        f"Atalho de execucao acionado: {self.desativar_atalho_var.get()}",
+                    )
+                )
+                self._alternar_execucao()
+
+        if self.winfo_exists():
+            self.after(80, self._processar_fila_atalho_execucao)
+
+    def _fechar_app(self):
+        self._parar()
+        self._parar_atalho_execucao()
+        self.destroy()
 
     def _rodar_runtime_monitor(self, session_id, monitor):
         try:
@@ -1514,6 +1680,8 @@ class TheBindingOfKeyboardApp(tk.Tk):
 
             if evento.get("tipo") == "ERRO_RUNTIME":
                 self.rodando = False
+                self.runtime_monitor = None
+                self._parar_bloqueador_input()
                 self._fechar_gamepad_backends()
                 self.runtime_profiles = []
                 self.runtime_action_counts_by_slot = {}
@@ -1522,13 +1690,14 @@ class TheBindingOfKeyboardApp(tk.Tk):
                 self._registrar_atividade_runtime(
                     activity_message("ERRO", evento.get("mensagem", ""))
                 )
-                self.start_button.state(["!disabled"])
-                self.stop_button.state(["disabled"])
+                self._atualizar_estado_execucao()
                 continue
 
             if evento.get("tipo") == "RUNTIME_FINALIZADO":
                 if self.rodando:
                     self.rodando = False
+                    self.runtime_monitor = None
+                    self._parar_bloqueador_input()
                     self._fechar_gamepad_backends()
                     self.runtime_profiles = []
                     self.runtime_action_counts_by_slot = {}
@@ -1548,6 +1717,16 @@ class TheBindingOfKeyboardApp(tk.Tk):
 
     def _processar_evento_runtime(self, evento):
         if not self.runtime_profiles:
+            return
+
+        if self._evento_e_atalho_desativar(evento):
+            self._registrar_atividade_runtime(
+                activity_message(
+                    "INFO",
+                    f"Atalho de parada acionado: {self.desativar_atalho_var.get()}",
+                )
+            )
+            self._parar()
             return
 
         for perfil in self.runtime_profiles:
@@ -1604,11 +1783,63 @@ class TheBindingOfKeyboardApp(tk.Tk):
                         f"{acao.get('entrada')} {acao.get('estado')} -> {acao.get('acao')}"
                     )
 
+    def _evento_e_atalho_desativar(self, evento):
+        atalho = normalizar_rotulo_entrada(self.desativar_atalho_var.get())
+
+        if not atalho:
+            return False
+
+        return (
+            normalizar_rotulo_entrada(evento.get("tipo")) == "TECLADO"
+            and normalizar_rotulo_entrada(evento.get("acao")) == "DOWN"
+            and normalizar_rotulo_entrada(evento.get("entrada")) == atalho
+        )
+
+    def _validar_atalho_desativar_para_start(self):
+        atalho = normalizar_rotulo_entrada(self.desativar_atalho_var.get())
+
+        if atalho:
+            return True
+
+        self.status_var.set("Defina o atalho para parar antes de iniciar.")
+        messagebox.showwarning(
+            APP_NAME,
+            "Defina um atalho para parar antes de iniciar.",
+        )
+        return False
+
     def _criar_backend_gamepad(self):
         return XboxGamepadBackend(
             stick_value=self._valor_int_var(self.stick_intensity_var, 100) / 100,
             pulse_seconds=self._valor_int_var(self.mouse_pulse_ms_var, 60) / 1000,
         )
+
+    def _iniciar_bloqueador_input(self, perfis, session_id=None):
+        self._parar_bloqueador_input()
+
+        spec = criar_especificacao_bloqueio(perfis)
+
+        if spec.empty():
+            return
+
+        callback = None
+        if session_id is not None:
+            callback = lambda evento: self._receber_evento_runtime(session_id, evento)
+
+        self.input_blocker = PhysicalInputBlocker(
+            spec,
+            keyboard_event_callback=callback,
+        )
+        self.input_blocker.start()
+
+    def _parar_bloqueador_input(self):
+        if self.input_blocker is None:
+            return
+
+        try:
+            self.input_blocker.stop()
+        finally:
+            self.input_blocker = None
 
     def _atualizar_gamepad_temporarios(self):
         if not self.gamepad_backends:
@@ -1685,10 +1916,12 @@ class TheBindingOfKeyboardApp(tk.Tk):
             self.status_var.set("Status: Rodando")
             self.start_button.state(["disabled"])
             self.stop_button.state(["!disabled"])
+            self.stop_button.configure(text="Pare")
         else:
             self.status_var.set("Status: Parado")
             self.start_button.state(["!disabled"])
-            self.stop_button.state(["disabled"])
+            self.stop_button.state(["!disabled"])
+            self.stop_button.configure(text="Ativar")
 
 
 class TestGamepadWindow(tk.Toplevel):

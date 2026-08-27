@@ -7,6 +7,7 @@ DEFAULT_EXECUTION = {
     "stick_intensity": 100,
     "mouse_pulse_ms": 60,
     "mouse_deadzone": 0,
+    "desativar_atalho": "",
 }
 
 
@@ -48,6 +49,7 @@ def normalize_execution_config(execucao):
     data["stick_intensity"] = _clamp_int(data.get("stick_intensity"), 1, 100, 100)
     data["mouse_pulse_ms"] = _clamp_int(data.get("mouse_pulse_ms"), 10, 500, 60)
     data["mouse_deadzone"] = _clamp_int(data.get("mouse_deadzone"), 0, 100, 0)
+    data["desativar_atalho"] = _normalize_shortcut(data.get("desativar_atalho"))
     return data
 
 
@@ -58,3 +60,7 @@ def _clamp_int(value, min_value, max_value, default):
         return default
 
     return max(min_value, min(max_value, number))
+
+
+def _normalize_shortcut(value):
+    return str(value or "").strip().upper()

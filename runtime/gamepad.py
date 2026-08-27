@@ -38,6 +38,8 @@ STICK_DIRECTIONS = {
     "RIGHT STICK RIGHT": ("right", "right"),
 }
 
+MOUSE_DELTA_FOR_FULL_STICK = 24
+
 
 class GamepadBackendError(RuntimeError):
     pass
@@ -93,10 +95,17 @@ class XboxGamepadBackend:
             "left": {},
             "right": {},
         }
+        self.stick_analog_pulses = {
+            "left": {},
+            "right": {},
+        }
 
     def aplicar_acao(self, acao_mapeada):
         acao = normalizar_acao_controle(acao_mapeada.get("acao", ""))
         estado = str(acao_mapeada.get("estado", "")).upper()
+
+        if acao_mapeada.get("stick_analog"):
+            return self._aplicar_stick_analogico(acao_mapeada)
 
         if not acao:
             return False
@@ -125,6 +134,20 @@ class XboxGamepadBackend:
 
             for direcao in expirados:
                 del pulses[direcao]
+                alterado = True
+
+            if expirados:
+                self._atualizar_stick(stick)
+
+        for stick, pulses in self.stick_analog_pulses.items():
+            expirados = [
+                eixo
+                for eixo, (_valor, expira_em) in pulses.items()
+                if expira_em <= agora
+            ]
+
+            for eixo in expirados:
+                del pulses[eixo]
                 alterado = True
 
             if expirados:
@@ -190,22 +213,72 @@ class XboxGamepadBackend:
         self.gamepad.update()
         return True
 
+    def _aplicar_stick_analogico(self, acao_mapeada):
+        analogico = acao_mapeada.get("stick_analog") or {}
+        stick = analogico.get("stick")
+
+        if stick not in self.stick_analog_pulses:
+            return False
+
+        axes = set(analogico.get("axes") or [])
+        expira_em = self.time_func() + self.pulse_seconds
+
+        if "x" in axes:
+            self._definir_pulso_analogico(stick, "x", analogico.get("x", 0), expira_em)
+
+        if "y" in axes:
+            self._definir_pulso_analogico(stick, "y", -analogico.get("y", 0), expira_em)
+
+        self._atualizar_stick(stick)
+        self.gamepad.update()
+        return True
+
+    def _definir_pulso_analogico(self, stick, eixo, deslocamento, expira_em):
+        valor = self._normalizar_deslocamento_mouse(deslocamento)
+
+        if valor == 0.0:
+            self.stick_analog_pulses[stick].pop(eixo, None)
+        else:
+            self.stick_analog_pulses[stick][eixo] = (valor, expira_em)
+
+    def _normalizar_deslocamento_mouse(self, deslocamento):
+        try:
+            valor = float(deslocamento) / MOUSE_DELTA_FOR_FULL_STICK
+        except (TypeError, ValueError):
+            return 0.0
+
+        valor = max(-1.0, min(1.0, valor))
+        return valor * self.stick_value
+
     def _atualizar_stick(self, stick):
         direcoes = set(self.stick_directions[stick])
         direcoes.update(self.stick_pulses[stick])
+        analogico = self.stick_analog_pulses[stick]
 
         x = 0.0
         y = 0.0
+        eixo_x_digital = False
+        eixo_y_digital = False
 
         if "left" in direcoes and "right" not in direcoes:
             x = -self.stick_value
+            eixo_x_digital = True
         elif "right" in direcoes and "left" not in direcoes:
             x = self.stick_value
+            eixo_x_digital = True
 
         if "up" in direcoes and "down" not in direcoes:
             y = self.stick_value
+            eixo_y_digital = True
         elif "down" in direcoes and "up" not in direcoes:
             y = -self.stick_value
+            eixo_y_digital = True
+
+        if not eixo_x_digital and "x" in analogico:
+            x = analogico["x"][0]
+
+        if not eixo_y_digital and "y" in analogico:
+            y = analogico["y"][0]
 
         if stick == "left":
             self.gamepad.left_joystick_float(x_value_float=x, y_value_float=y)

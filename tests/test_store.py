@@ -13,6 +13,7 @@ class ConfigStoreTest(unittest.TestCase):
                 "stick_intensity": 500,
                 "mouse_pulse_ms": 1,
                 "mouse_deadzone": -10,
+                "desativar_atalho": " f12 ",
             }
         )
 
@@ -20,6 +21,7 @@ class ConfigStoreTest(unittest.TestCase):
         self.assertEqual(execucao["stick_intensity"], 100)
         self.assertEqual(execucao["mouse_pulse_ms"], 10)
         self.assertEqual(execucao["mouse_deadzone"], 0)
+        self.assertEqual(execucao["desativar_atalho"], "F12")
 
     def test_load_and_save_roundtrip(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -28,12 +30,13 @@ class ConfigStoreTest(unittest.TestCase):
             save_config(
                 path,
                 {"Padrao": {"padrao": "Xbox"}},
-                {"controles": ["Padrao"]},
+                {"controles": ["Padrao"], "desativar_atalho": "esc"},
             )
             data = load_config(path)
 
         self.assertIn("Padrao", data["configuracoes"])
         self.assertEqual(data["execucao"]["controles"], ["Padrao"])
+        self.assertEqual(data["execucao"]["desativar_atalho"], "ESC")
 
 
 if __name__ == "__main__":

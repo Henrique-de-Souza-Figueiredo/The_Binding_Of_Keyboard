@@ -98,6 +98,27 @@ class GamepadTest(unittest.TestCase):
         self.assertIn(("right_stick", -1.0, 0.0), backend.gamepad.calls)
         self.assertIn(("right_stick", 0.0, 0.0), backend.gamepad.calls)
 
+    def test_mouse_move_can_drive_stick_analogically(self):
+        backend, clock = self.make_backend()
+
+        backend.aplicar_acao(
+            {
+                "acao": "Right Stick",
+                "estado": "MOVE",
+                "stick_analog": {
+                    "stick": "right",
+                    "x": 12,
+                    "y": -6,
+                    "axes": ["x", "y"],
+                },
+            }
+        )
+        clock.value += 1.0
+        self.assertTrue(backend.atualizar_temporarios())
+
+        self.assertIn(("right_stick", 0.5, 0.25), backend.gamepad.calls)
+        self.assertIn(("right_stick", 0.0, 0.0), backend.gamepad.calls)
+
     def test_playstation_and_nintendo_aliases(self):
         self.assertEqual(normalizar_acao_controle("Cross"), "A")
         self.assertEqual(normalizar_acao_controle("ZL"), "LT")

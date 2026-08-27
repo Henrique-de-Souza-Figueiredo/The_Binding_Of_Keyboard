@@ -4,7 +4,7 @@
             "botoes": [
                 {
                     "nome": "A",
-                    "entrada": "H",
+                    "entrada": "SPACE",
                     "acao": "A"
                 },
                 {
@@ -34,13 +34,13 @@
                 },
                 {
                     "nome": "LT",
-                    "entrada": "MOUSE_LEFT",
-                    "acao": "LT"
+                    "acao": "LT",
+                    "entrada": "MOUSE_RIGHT"
                 },
                 {
                     "nome": "RT",
-                    "entrada": "MOUSE_RIGHT",
-                    "acao": "RT"
+                    "acao": "RT",
+                    "entrada": "MOUSE_LEFT"
                 },
                 {
                     "nome": "LS",
@@ -131,8 +131,17 @@
             "padrao": "Xbox",
             "dispositivos": {
                 "teclado": "",
-                "mouse": ""
+                "mouse": "FE63F71A0515"
             }
         }
+    },
+    "execucao": {
+        "controles": [
+            "Padrão"
+        ],
+        "stick_intensity": 100,
+        "mouse_pulse_ms": 60,
+        "mouse_deadzone": 0,
+        "desativar_atalho": "NUM-"
     }
 }
