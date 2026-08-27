@@ -1,0 +1,138 @@
+{
+    "configuracoes": {
+        "Padrão": {
+            "botoes": [
+                {
+                    "nome": "A",
+                    "entrada": "H",
+                    "acao": "A"
+                },
+                {
+                    "nome": "B",
+                    "entrada": "CTRL",
+                    "acao": "B"
+                },
+                {
+                    "nome": "X",
+                    "entrada": "E",
+                    "acao": "X"
+                },
+                {
+                    "nome": "Y",
+                    "entrada": "R",
+                    "acao": "Y"
+                },
+                {
+                    "nome": "LB",
+                    "entrada": "Q",
+                    "acao": "LB"
+                },
+                {
+                    "nome": "RB",
+                    "entrada": "F",
+                    "acao": "RB"
+                },
+                {
+                    "nome": "LT",
+                    "entrada": "MOUSE_LEFT",
+                    "acao": "LT"
+                },
+                {
+                    "nome": "RT",
+                    "entrada": "MOUSE_RIGHT",
+                    "acao": "RT"
+                },
+                {
+                    "nome": "LS",
+                    "entrada": "SHIFT",
+                    "acao": "LS"
+                },
+                {
+                    "nome": "RS",
+                    "entrada": "C",
+                    "acao": "RS"
+                },
+                {
+                    "nome": "D-Pad Up",
+                    "entrada": "UP",
+                    "acao": "D-Pad Up"
+                },
+                {
+                    "nome": "D-Pad Down",
+                    "entrada": "DOWN",
+                    "acao": "D-Pad Down"
+                },
+                {
+                    "nome": "D-Pad Left",
+                    "entrada": "LEFT",
+                    "acao": "D-Pad Left"
+                },
+                {
+                    "nome": "D-Pad Right",
+                    "entrada": "RIGHT",
+                    "acao": "D-Pad Right"
+                },
+                {
+                    "nome": "Start",
+                    "entrada": "ENTER",
+                    "acao": "Start"
+                },
+                {
+                    "nome": "Back",
+                    "entrada": "TAB",
+                    "acao": "Back"
+                },
+                {
+                    "nome": "Guide",
+                    "entrada": "F8",
+                    "acao": "Guide"
+                },
+                {
+                    "nome": "Left Stick Up",
+                    "entrada": "W",
+                    "acao": "Left Stick Up"
+                },
+                {
+                    "nome": "Left Stick Down",
+                    "entrada": "S",
+                    "acao": "Left Stick Down"
+                },
+                {
+                    "nome": "Left Stick Left",
+                    "entrada": "A",
+                    "acao": "Left Stick Left"
+                },
+                {
+                    "nome": "Left Stick Right",
+                    "entrada": "D",
+                    "acao": "Left Stick Right"
+                },
+                {
+                    "nome": "Right Stick Up",
+                    "entrada": "MOUSE_UP",
+                    "acao": "Right Stick Up"
+                },
+                {
+                    "nome": "Right Stick Down",
+                    "entrada": "MOUSE_DOWN",
+                    "acao": "Right Stick Down"
+                },
+                {
+                    "nome": "Right Stick Left",
+                    "entrada": "MOUSE_LEFT_MOVE",
+                    "acao": "Right Stick Left"
+                },
+                {
+                    "nome": "Right Stick Right",
+                    "entrada": "MOUSE_RIGHT_MOVE",
+                    "acao": "Right Stick Right"
+                }
+            ],
+            "padrao": "Xbox",
+            "dispositivos": {
+                "teclado": "",
+                "mouse": ""
+            }
+        }
+    }
+}

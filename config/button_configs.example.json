@@ -1,0 +1,36 @@
+{
+    "configuracoes": {
+        "Padrao": {
+            "padrao": "Xbox",
+            "dispositivos": {
+                "teclado": "",
+                "mouse": ""
+            },
+            "botoes": [
+                {
+                    "nome": "A",
+                    "entrada": "SPACE",
+                    "acao": "A"
+                },
+                {
+                    "nome": "B",
+                    "entrada": "CTRL",
+                    "acao": "B"
+                }
+            ]
+        }
+    },
+    "execucao": {
+        "controles": [
+            "Padrao",
+            "",
+            "",
+            "",
+            "",
+            ""
+        ],
+        "stick_intensity": 100,
+        "mouse_pulse_ms": 60,
+        "mouse_deadzone": 0
+    }
+}

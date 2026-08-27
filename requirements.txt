@@ -1,0 +1,4 @@
+pywin32
+vgamepad
+hidapi
+pyinstaller
